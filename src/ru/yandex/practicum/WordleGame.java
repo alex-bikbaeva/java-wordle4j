@@ -2,10 +2,8 @@ package ru.yandex.practicum;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class WordleGame {
@@ -23,7 +21,10 @@ public class WordleGame {
     private int attemptsLeft;
     private boolean won;
 
-    private final LinkedHashMap<String, String> guessesWithHints = new LinkedHashMap<>();
+    private final Set<Character> absentLetters = new HashSet<>();
+    private final Set<Character> presentLetters = new HashSet<>();
+    private final List<Character> correctPositions = new ArrayList<>();
+    private final List<Set<Character>> forbiddenPositions = new ArrayList<>();
     private final Set<String> suggestedWords = new HashSet<>();
 
     public WordleGame(WordleDictionary dictionary, PrintWriter log) {
@@ -37,6 +38,11 @@ public class WordleGame {
         this.attemptsLeft = attemptsLeft;
         this.log = log;
         this.won = false;
+
+        for (int i = 0; i < wordLength; i++) {
+            correctPositions.add(null);
+            forbiddenPositions.add(new HashSet<>());
+        }
 
         log.println("Создана игра. Ответ длиной " + wordLength + ", попыток: " + attemptsLeft);
     }
@@ -61,8 +67,16 @@ public class WordleGame {
         return wordLength;
     }
 
-    public Map<String, String> getGuessesWithHints() {
-        return new LinkedHashMap<>(guessesWithHints);
+    public Set<Character> getAbsentLetters() {
+        return new HashSet<>(absentLetters);
+    }
+
+    public Set<Character> getPresentLetters() {
+        return new HashSet<>(presentLetters);
+    }
+
+    public List<Character> getCorrectPositions() {
+        return new ArrayList<>(correctPositions);
     }
 
     public String makeGuess(String input)
@@ -74,8 +88,6 @@ public class WordleGame {
         String guess = WordleDictionary.normalize(input);
         validateGuess(guess);
 
-        // по ТЗ ход засчитывается, если слово прошло общую проверку ввода,
-        // даже если его нет в словаре
         attemptsLeft--;
 
         if (!dictionary.contains(guess)) {
@@ -84,7 +96,7 @@ public class WordleGame {
         }
 
         String hint = buildHint(guess);
-        guessesWithHints.put(guess, hint);
+        updateKnownLetters(guess, hint);
 
         if (guess.equals(answer)) {
             won = true;
@@ -95,10 +107,15 @@ public class WordleGame {
     }
 
     public String suggestWord() {
-        List<String> guesses = new ArrayList<>(guessesWithHints.keySet());
-        List<String> hints = new ArrayList<>(guessesWithHints.values());
+        List<String> candidates = dictionary.findCandidates(
+                absentLetters,
+                presentLetters,
+                correctPositions,
+                forbiddenPositions,
+                suggestedWords,
+                wordLength
+        );
 
-        List<String> candidates = dictionary.findCandidates(guesses, hints, suggestedWords, wordLength);
         if (candidates.isEmpty()) {
             log.println("Подсказка не найдена: кандидатов не осталось.");
             return "";
@@ -126,13 +143,44 @@ public class WordleGame {
         return buildHintStatic(guess, answer);
     }
 
+    private void updateKnownLetters(String guess, String hint) {
+        Set<Character> confirmedInThisGuess = new HashSet<>();
+
+        // сначала обрабатываем точные и частичные совпадения
+        for (int i = 0; i < guess.length(); i++) {
+            char letter = guess.charAt(i);
+            char symbol = hint.charAt(i);
+
+            if (symbol == EXACT_SYMBOL) {
+                presentLetters.add(letter);
+                confirmedInThisGuess.add(letter);
+                correctPositions.set(i, letter);
+            } else if (symbol == PRESENT_SYMBOL) {
+                presentLetters.add(letter);
+                confirmedInThisGuess.add(letter);
+                forbiddenPositions.get(i).add(letter);
+            }
+        }
+
+        // потом аккуратно добавляем отсутствующие буквы
+        for (int i = 0; i < guess.length(); i++) {
+            char letter = guess.charAt(i);
+            char symbol = hint.charAt(i);
+
+            if (symbol == ABSENT_SYMBOL) {
+                if (!confirmedInThisGuess.contains(letter) && !presentLetters.contains(letter)) {
+                    absentLetters.add(letter);
+                }
+            }
+        }
+    }
+
     public static String buildHintStatic(String guess, String answer) {
         StringBuilder hint = new StringBuilder();
 
         boolean[] usedInAnswer = new boolean[answer.length()];
-
-        // Сначала отмечаем точные совпадения
         char[] result = new char[guess.length()];
+
         for (int i = 0; i < guess.length(); i++) {
             if (guess.charAt(i) == answer.charAt(i)) {
                 result[i] = EXACT_SYMBOL;
@@ -142,7 +190,6 @@ public class WordleGame {
             }
         }
 
-        // Потом ищем буквы, которые есть, но не на месте
         for (int i = 0; i < guess.length(); i++) {
             if (result[i] == EXACT_SYMBOL) {
                 continue;

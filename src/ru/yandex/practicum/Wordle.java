@@ -38,14 +38,6 @@ public class Wordle {
 
                     String normalized = WordleDictionary.normalize(input);
 
-                    // Быстрая проверка на точное совпадение, как просит ТЗ
-                    if (normalized.equals(game.getAnswer())) {
-                        String hint = game.makeGuess(normalized);
-                        System.out.println(normalized);
-                        System.out.println(hint);
-                        break;
-                    }
-
                     String hint = game.makeGuess(normalized);
                     System.out.println(normalized);
                     System.out.println(hint);

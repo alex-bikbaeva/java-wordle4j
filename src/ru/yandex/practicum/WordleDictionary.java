@@ -1,7 +1,6 @@
 package ru.yandex.practicum;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -9,12 +8,10 @@ import java.util.Set;
 public class WordleDictionary {
 
     private final List<String> words;
-    private final Set<String> wordSet;
     private final Random random = new Random();
 
     public WordleDictionary(List<String> words) {
         this.words = new ArrayList<>(words);
-        this.wordSet = new HashSet<>(words);
     }
 
     public List<String> getWords() {
@@ -22,7 +19,7 @@ public class WordleDictionary {
     }
 
     public boolean contains(String word) {
-        return wordSet.contains(word);
+        return words.contains(word);
     }
 
     public String getRandomWord() {
@@ -49,30 +46,69 @@ public class WordleDictionary {
         return word.matches("[а-я]+");
     }
 
-
-    public boolean matchesHistory(String candidate, List<String> guesses, List<String> hints) {
-        for (int i = 0; i < guesses.size(); i++) {
-            String expectedHint = WordleGame.buildHintStatic(guesses.get(i), candidate);
-            if (!expectedHint.equals(hints.get(i))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public List<String> findCandidates(List<String> guesses, List<String> hints, Set<String> excludedWords, int length) {
+    public List<String> findCandidates(Set<Character> absentLetters,
+                                       Set<Character> presentLetters,
+                                       List<Character> correctPositions,
+                                       List<Set<Character>> forbiddenPositions,
+                                       Set<String> excludedWords,
+                                       int length) {
         List<String> result = new ArrayList<>();
-        for (String candidate : words) {
-            if (candidate.length() != length) {
-                continue;
-            }
+
+        for (String candidate : getWordsOfLength(length)) {
             if (excludedWords.contains(candidate)) {
                 continue;
             }
-            if (matchesHistory(candidate, guesses, hints)) {
-                result.add(candidate);
+
+            boolean rejected = false;
+
+            // 1. Слово не должно содержать буквы, которых точно нет
+            for (Character absent : absentLetters) {
+                if (candidate.indexOf(absent) >= 0) {
+                    rejected = true;
+                    break;
+                }
             }
+            if (rejected) {
+                continue;
+            }
+
+            // 2. Слово должно содержать все буквы, которые точно есть
+            for (Character present : presentLetters) {
+                if (candidate.indexOf(present) < 0) {
+                    rejected = true;
+                    break;
+                }
+            }
+            if (rejected) {
+                continue;
+            }
+
+            // 3. В известных позициях должны стоять известные буквы
+            for (int i = 0; i < correctPositions.size(); i++) {
+                Character correct = correctPositions.get(i);
+                if (correct != null && candidate.charAt(i) != correct) {
+                    rejected = true;
+                    break;
+                }
+            }
+            if (rejected) {
+                continue;
+            }
+
+            // 4. Буквы не должны стоять в запрещённых позициях
+            for (int i = 0; i < forbiddenPositions.size(); i++) {
+                if (forbiddenPositions.get(i).contains(candidate.charAt(i))) {
+                    rejected = true;
+                    break;
+                }
+            }
+            if (rejected) {
+                continue;
+            }
+
+            result.add(candidate);
         }
+
         return result;
     }
 }
